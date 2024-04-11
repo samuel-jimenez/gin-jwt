@@ -152,7 +152,7 @@ type GinJWTMiddleware struct {
 	// CookieSameSite allow use http.SameSite cookie param
 	CookieSameSite http.SameSite
 
-	// ParseOptions allow to modify jwt's parser methods. 
+	// ParseOptions allow to modify jwt's parser methods.
 	// WithTimeFunc is always added to ensure the TimeFunc is propagated to the validator
 	ParseOptions []jwt.ParserOption
 }
