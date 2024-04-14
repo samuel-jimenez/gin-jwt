@@ -8,7 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	jwt "github.com/appleboy/gin-jwt/v2"
+	jwt "github.com/samuel-jimenez/gin-jwt/v2"
 )
 
 type login struct {
