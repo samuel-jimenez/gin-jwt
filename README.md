@@ -45,6 +45,12 @@ import "github.com/appleboy/gin-jwt"
 
 ## Example
 
+Generate keys:
+```
+openssl genpkey -algorithm ed25519 -out /path/to/jwtEdDSA.key  -outpubkey /path/to/jwtEdDSA.key.pub 
+ssh-keygen -t rsa -b 4096 -a 100 -f /path/to/rsa
+```
+
 Please see [the example file](_example/basic/server.go) and you can use `ExtractClaims` to fetch user data.
 
 ```go
@@ -95,7 +101,8 @@ func main() {
   // the jwt middleware
   authMiddleware, err := jwt.New(&jwt.GinJWTMiddleware{
     Realm:       "test zone",
-    Key:         []byte("secret key"),
+    PrivKeyFile: "/path/to/jwtEdDSA.key",
+		PubKeyFile:  "/path/to/jwtEdDSA.key.pub",
     Timeout:     time.Hour,
     MaxRefresh:  time.Hour,
     IdentityKey: identityKey,

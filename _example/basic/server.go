@@ -8,7 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	jwt "github.com/appleboy/gin-jwt/v2"
+	ginJWT "github.com/samuel-jimenez/gin-jwt/v2"
 )
 
 type login struct {
@@ -19,7 +19,7 @@ type login struct {
 var identityKey = "id"
 
 func helloHandler(c *gin.Context) {
-	claims := jwt.ExtractClaims(c)
+	claims := ginJWT.ExtractClaims(c)
 	user, _ := c.Get(identityKey)
 	c.JSON(200, gin.H{
 		"userID":   claims[identityKey],
@@ -43,23 +43,26 @@ func main() {
 		port = "8000"
 	}
 
-	// the jwt middleware
-	authMiddleware, err := jwt.New(&jwt.GinJWTMiddleware{
+	//ssh-keygen -t ed25519 -a 100 -f /path/to/file
+	// the ginJWT middleware
+	authMiddleware, err := ginJWT.New(&ginJWT.GinJWTMiddleware{
 		Realm:       "test zone",
-		Key:         []byte("secret key"),
+		SigningAlgorithm: "EdDSA",
+		PrivKeyFile:      "/path/to/file",
+		PubKeyFile:       "/path/to/file.pub",
 		Timeout:     time.Hour,
 		MaxRefresh:  time.Hour,
 		IdentityKey: identityKey,
-		PayloadFunc: func(data interface{}) jwt.MapClaims {
+		PayloadFunc: func(data interface{}) ginJWT.MapClaims {
 			if v, ok := data.(*User); ok {
-				return jwt.MapClaims{
+				return ginJWT.MapClaims{
 					identityKey: v.UserName,
 				}
 			}
-			return jwt.MapClaims{}
+			return ginJWT.MapClaims{}
 		},
 		IdentityHandler: func(c *gin.Context) interface{} {
-			claims := jwt.ExtractClaims(c)
+			claims := ginJWT.ExtractClaims(c)
 			return &User{
 				UserName: claims[identityKey].(string),
 			}
@@ -67,7 +70,7 @@ func main() {
 		Authenticator: func(c *gin.Context) (interface{}, error) {
 			var loginVals login
 			if err := c.ShouldBind(&loginVals); err != nil {
-				return "", jwt.ErrMissingLoginValues
+				return "", ginJWT.ErrMissingLoginValues
 			}
 			userID := loginVals.Username
 			password := loginVals.Password
@@ -80,7 +83,7 @@ func main() {
 				}, nil
 			}
 
-			return nil, jwt.ErrFailedAuthentication
+			return nil, ginJWT.ErrFailedAuthentication
 		},
 		Authorizator: func(data interface{}, c *gin.Context) bool {
 			if v, ok := data.(*User); ok && v.UserName == "admin" {
@@ -117,7 +120,7 @@ func main() {
 		log.Fatal("JWT Error:" + err.Error())
 	}
 
-	// When you use jwt.New(), the function is already automatically called for checking,
+	// When you use ginJWT.New(), the function is already automatically called for checking,
 	// which means you don't need to call it again.
 	errInit := authMiddleware.MiddlewareInit()
 
@@ -128,7 +131,7 @@ func main() {
 	r.POST("/login", authMiddleware.LoginHandler)
 
 	r.NoRoute(authMiddleware.MiddlewareFunc(), func(c *gin.Context) {
-		claims := jwt.ExtractClaims(c)
+		claims := ginJWT.ExtractClaims(c)
 		log.Printf("NoRoute claims: %#v\n", claims)
 		c.JSON(404, gin.H{"code": "PAGE_NOT_FOUND", "message": "Page not found"})
 	})

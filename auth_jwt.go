@@ -1,12 +1,16 @@
-package jwt
+package ginjwt
 
 import (
-	"crypto/rsa"
+	"crypto"
+	// "crypto/rsa"
+	// "crypto/ed25519"
 	"errors"
 	"net/http"
 	"os"
 	"strings"
 	"time"
+	// "fmt"
+			// fmt.Println("GetClaimsFromJWT mw",mw)
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
@@ -25,11 +29,11 @@ type GinJWTMiddleware struct {
 	// Realm name to display to the user. Required.
 	Realm string
 
-	// signing algorithm - possible values are HS256, HS384, HS512, RS256, RS384 or RS512
-	// Optional, default is HS256.
+	// signing algorithm - possible values are RS256, RS384, RS512, or EdDSA
+	// Optional, default is EdDSA.
 	SigningAlgorithm string
 
-	// Secret key used for signing. Required.
+	// Secret key used for signing.
 	Key []byte
 
 	// Callback to retrieve key used for signing. Setting KeyFunc will bypass
@@ -120,10 +124,18 @@ type GinJWTMiddleware struct {
 	PubKeyBytes []byte
 
 	// Private key
-	privKey *rsa.PrivateKey
+	// privKey key interface{}*rsa.PrivateKey
+	// type SigningMethodEd25519 struct{}
+	//TODO
+	// privKey key interface{}*ed25519.PrivateKey
+	// privKey *ed25519.PrivateKey
+	// privKey *crypto.PrivateKey
+	privKey crypto.PrivateKey
 
 	// Public key
-	pubKey *rsa.PublicKey
+	// pubKey *ed25519.PublicKey
+	pubKey crypto.PublicKey
+	// pubKey *crypto.PublicKey
 
 	// Optionally return the token as a cookie
 	SendCookie bool
@@ -156,68 +168,6 @@ type GinJWTMiddleware struct {
 	// WithTimeFunc is always added to ensure the TimeFunc is propagated to the validator
 	ParseOptions []jwt.ParserOption
 }
-
-var (
-	// ErrMissingSecretKey indicates Secret key is required
-	ErrMissingSecretKey = errors.New("secret key is required")
-
-	// ErrForbidden when HTTP status 403 is given
-	ErrForbidden = errors.New("you don't have permission to access this resource")
-
-	// ErrMissingAuthenticatorFunc indicates Authenticator is required
-	ErrMissingAuthenticatorFunc = errors.New("ginJWTMiddleware.Authenticator func is undefined")
-
-	// ErrMissingLoginValues indicates a user tried to authenticate without username or password
-	ErrMissingLoginValues = errors.New("missing Username or Password")
-
-	// ErrFailedAuthentication indicates authentication failed, could be faulty username or password
-	ErrFailedAuthentication = errors.New("incorrect Username or Password")
-
-	// ErrFailedTokenCreation indicates JWT Token failed to create, reason unknown
-	ErrFailedTokenCreation = errors.New("failed to create JWT Token")
-
-	// ErrExpiredToken indicates JWT token has expired. Can't refresh.
-	ErrExpiredToken = errors.New("token is expired") // in practice, this is generated from the jwt library not by us
-
-	// ErrEmptyAuthHeader can be thrown if authing with a HTTP header, the Auth header needs to be set
-	ErrEmptyAuthHeader = errors.New("auth header is empty")
-
-	// ErrMissingExpField missing exp field in token
-	ErrMissingExpField = errors.New("missing exp field")
-
-	// ErrWrongFormatOfExp field must be float64 format
-	ErrWrongFormatOfExp = errors.New("exp must be float64 format")
-
-	// ErrInvalidAuthHeader indicates auth header is invalid, could for example have the wrong Realm name
-	ErrInvalidAuthHeader = errors.New("auth header is invalid")
-
-	// ErrEmptyQueryToken can be thrown if authing with URL Query, the query token variable is empty
-	ErrEmptyQueryToken = errors.New("query token is empty")
-
-	// ErrEmptyCookieToken can be thrown if authing with a cookie, the token cookie is empty
-	ErrEmptyCookieToken = errors.New("cookie token is empty")
-
-	// ErrEmptyParamToken can be thrown if authing with parameter in path, the parameter in path is empty
-	ErrEmptyParamToken = errors.New("parameter token is empty")
-
-	// ErrInvalidSigningAlgorithm indicates signing algorithm is invalid, needs to be HS256, HS384, HS512, RS256, RS384 or RS512
-	ErrInvalidSigningAlgorithm = errors.New("invalid signing algorithm")
-
-	// ErrNoPrivKeyFile indicates that the given private key is unreadable
-	ErrNoPrivKeyFile = errors.New("private key file unreadable")
-
-	// ErrNoPubKeyFile indicates that the given public key is unreadable
-	ErrNoPubKeyFile = errors.New("public key file unreadable")
-
-	// ErrInvalidPrivKey indicates that the given private key is invalid
-	ErrInvalidPrivKey = errors.New("private key invalid")
-
-	// ErrInvalidPubKey indicates the the given public key is invalid
-	ErrInvalidPubKey = errors.New("public key invalid")
-
-	// IdentityKey default identity key
-	IdentityKey = "identity"
-)
 
 // New for check error with GinJWTMiddleware
 func New(m *GinJWTMiddleware) (*GinJWTMiddleware, error) {
@@ -253,23 +203,30 @@ func (mw *GinJWTMiddleware) privateKey() error {
 		keyData = filecontent
 	}
 
-	if mw.PrivateKeyPassphrase != "" {
-		//nolint:staticcheck
-		key, err := jwt.ParseRSAPrivateKeyFromPEMWithPassword(keyData, mw.PrivateKeyPassphrase)
-		if err != nil {
-			return ErrInvalidPrivKey
-		}
-		mw.privKey = key
-		return nil
-	}
-
-	key, err := jwt.ParseRSAPrivateKeyFromPEM(keyData)
+	// var key crypto.PrivateKey
+	// key, err := nil, ErrInvalidSigningAlgorithm
+	if keyData == nil {
+				return ErrInvalidPrivKey
+	} else {
+	// key, err := "", ErrInvalidSigningAlgorithm
+	// switch mw.SigningAlgorithm {
+	// case "EdDSA":
+	key, err := jwt.ParseEdPrivateKeyFromPEM(keyData)
+	// case "RS512", "RS384", "RS256":
+	// 	// if mw.PrivateKeyPassphrase == "" {
+	// 	key, err := jwt.ParseRSAPrivateKeyFromPEM(keyData)
+	// 	// } else {
+	// 	// key, err := jwt.ParseRSAPrivateKeyFromPEMWithPassword(keyData, mw.PrivateKeyPassphrase)
+	// 	// }
+	// }
+	// }
 	if err != nil {
+				// return err
 		return ErrInvalidPrivKey
 	}
 	mw.privKey = key
 	return nil
-}
+}}
 
 func (mw *GinJWTMiddleware) publicKey() error {
 	var keyData []byte
@@ -282,21 +239,34 @@ func (mw *GinJWTMiddleware) publicKey() error {
 		}
 		keyData = filecontent
 	}
+	// var key crypto.PublicKey
+	// key, err := nil,ErrInvalidSigningAlgorithm
 
-	key, err := jwt.ParseRSAPublicKeyFromPEM(keyData)
+	if keyData == nil {
+				return ErrInvalidPubKey
+	} else {
+	// key, err := "", ErrInvalidSigningAlgorithm
+	// switch mw.SigningAlgorithm {
+	// case "EdDSA":
+	key, err := jwt.ParseEdPublicKeyFromPEM(keyData)
+	// 	break
+	// case "RS512":
+	// case "RS384":
+	// case "RS256":
+	// 	key, err := jwt.ParseRSAPublicKeyFromPEM(keyData)
+	// 	break
+	// }
+	// }
 	if err != nil {
+		// return err
 		return ErrInvalidPubKey
 	}
 	mw.pubKey = key
 	return nil
-}
+}}
 
 func (mw *GinJWTMiddleware) usingPublicKeyAlgo() bool {
-	switch mw.SigningAlgorithm {
-	case "RS256", "RS512", "RS384":
-		return true
-	}
-	return false
+	return true
 }
 
 // MiddlewareInit initialize jwt configs.
@@ -306,7 +276,7 @@ func (mw *GinJWTMiddleware) MiddlewareInit() error {
 	}
 
 	if mw.SigningAlgorithm == "" {
-		mw.SigningAlgorithm = "HS256"
+		mw.SigningAlgorithm = "EdDSA"
 	}
 
 	if mw.Timeout == 0 {
@@ -664,7 +634,7 @@ func (mw *GinJWTMiddleware) TokenGenerator(data interface{}) (string, time.Time,
 			claims[key] = value
 		}
 	}
-
+// fmt.Println("TokenGenerator",token);
 	expire := mw.TimeFunc().Add(mw.Timeout)
 	claims["exp"] = expire.Unix()
 	claims["orig_iat"] = mw.TimeFunc().Unix()
@@ -770,13 +740,13 @@ func (mw *GinJWTMiddleware) ParseToken(c *gin.Context) (*jwt.Token, error) {
 		if jwt.GetSigningMethod(mw.SigningAlgorithm) != t.Method {
 			return nil, ErrInvalidSigningAlgorithm
 		}
-		if mw.usingPublicKeyAlgo() {
-			return mw.pubKey, nil
-		}
 
 		// save token string if valid
 		c.Set("JWT_TOKEN", token)
 
+		if mw.usingPublicKeyAlgo() {
+			return mw.pubKey, nil
+		}
 		return mw.Key, nil
 	}, mw.ParseOptions...)
 }

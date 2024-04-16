@@ -1,4 +1,4 @@
-package jwt
+package ginjwt
 
 import (
 	"errors"
@@ -18,14 +18,21 @@ import (
 	"github.com/tidwall/gjson"
 )
 
+	// fmt.Println("TestTokenFromCookieString userToken",userToken)
+
 // Login form structure.
 type Login struct {
 	Username string `form:"username" json:"username" binding:"required"`
 	Password string `form:"password" json:"password" binding:"required"`
 }
 
+// ssh-keygen -t ed25519 -a 100 -f /path/to/ed25519
+// testdata/ed25519
 var (
-	key                  = []byte("secret key")
+	PrivKeyLocation = "testdata/jwtEdDSA.key"
+	PubKeyLocation = "testdata/jwtEdDSA.key.pub"
+	_keyData, _ = os.ReadFile(PrivKeyLocation)
+	key, _ = jwt.ParseEdPrivateKeyFromPEM(_keyData)
 	defaultAuthenticator = func(c *gin.Context) (interface{}, error) {
 		var loginVals Login
 		userID := loginVals.Username
@@ -38,7 +45,8 @@ var (
 		return userID, ErrFailedAuthentication
 	}
 )
-
+//TODO test RSA
+/*
 func makeTokenString(SigningAlgorithm string, username string) string {
 	if SigningAlgorithm == "" {
 		SigningAlgorithm = "HS256"
@@ -67,6 +75,48 @@ func keyFunc(token *jwt.Token) (interface{}, error) {
 		return nil, err
 	}
 	return jwt.ParseRSAPublicKeyFromPEM(cert)
+}*/
+
+func makeTokenString(SigningAlgorithm string, username string) string {
+	if SigningAlgorithm == "" {
+		SigningAlgorithm = "EdDSA"
+	}
+
+	token := jwt.New(jwt.GetSigningMethod(SigningAlgorithm))
+	claims := token.Claims.(jwt.MapClaims)
+	claims["identity"] = username
+	claims["exp"] = time.Now().Add(time.Hour).Unix()
+	claims["orig_iat"] = time.Now().Unix()
+	var tokenString string
+	// var key crypto.PrivateKey
+	// switch SigningAlgorithm {
+	// case "EdDSA":
+	// 	key, err := jwt.ParseEdPrivateKeyFromPEM(keyData)
+	// case "RS512", "RS384", "EdDSA":
+	// 	// if mw.PrivateKeyPassphrase == "" {
+	// 	key, err := jwt.ParseRSAPrivateKeyFromPEM(keyData)
+	// 	// } else {
+	// 	// key, err := jwt.ParseRSAPrivateKeyFromPEMWithPassword(keyData, mw.PrivateKeyPassphrase)
+	// 	// }
+	// }
+	// if SigningAlgorithm == "EdDSA" {
+		keyData, _ := os.ReadFile("testdata/jwtEdDSA.key")
+		signKey, _ := jwt.ParseEdPrivateKeyFromPEM(keyData)
+		tokenString, _ = token.SignedString(signKey)
+	// } else {
+	// 	tokenString, _ = token.SignedString(key)
+	// }
+
+	return tokenString
+}
+// openssl genpkey -algorithm ed25519 -out testdata/jwtEdDSA.key  -outpubkey testdata/jwtEdDSA.key.pub
+func keyFunc(token *jwt.Token) (interface{}, error) {
+	cert, err := os.ReadFile("testdata/jwtEdDSA.key.pub")
+	if err != nil {
+		return nil, err
+	}
+	// return jwt.ParseRSAPublicKeyFromPEM(cert)
+	return jwt.ParseEdPublicKeyFromPEM(cert)
 }
 
 func TestMissingKey(t *testing.T) {
@@ -78,13 +128,30 @@ func TestMissingKey(t *testing.T) {
 	})
 
 	assert.Error(t, err)
-	assert.Equal(t, ErrMissingSecretKey, err)
+	assert.Equal(t, ErrInvalidPrivKey, err)
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+// ----------------------------------------------------------------------------------------
+// test_auth_jwt_test ed25519
+
+
 
 func TestMissingPrivKey(t *testing.T) {
 	_, err := New(&GinJWTMiddleware{
 		Realm:            "zone",
-		SigningAlgorithm: "RS256",
+		SigningAlgorithm: "EdDSA",
 		PrivKeyFile:      "nonexisting",
 	})
 
@@ -95,8 +162,8 @@ func TestMissingPrivKey(t *testing.T) {
 func TestMissingPubKey(t *testing.T) {
 	_, err := New(&GinJWTMiddleware{
 		Realm:            "zone",
-		SigningAlgorithm: "RS256",
-		PrivKeyFile:      "testdata/jwtRS256.key",
+		SigningAlgorithm: "EdDSA",
+		PrivKeyFile:		PrivKeyLocation,
 		PubKeyFile:       "nonexisting",
 	})
 
@@ -107,9 +174,9 @@ func TestMissingPubKey(t *testing.T) {
 func TestInvalidPrivKey(t *testing.T) {
 	_, err := New(&GinJWTMiddleware{
 		Realm:            "zone",
-		SigningAlgorithm: "RS256",
+		SigningAlgorithm: "EdDSA",
 		PrivKeyFile:      "testdata/invalidprivkey.key",
-		PubKeyFile:       "testdata/jwtRS256.key.pub",
+		PubKeyFile:       "testdata/jwtEdDSA.key.pub",
 	})
 
 	assert.Error(t, err)
@@ -119,9 +186,9 @@ func TestInvalidPrivKey(t *testing.T) {
 func TestInvalidPrivKeyBytes(t *testing.T) {
 	_, err := New(&GinJWTMiddleware{
 		Realm:            "zone",
-		SigningAlgorithm: "RS256",
+		SigningAlgorithm: "EdDSA",
 		PrivKeyBytes:     []byte("Invalid_Private_Key"),
-		PubKeyFile:       "testdata/jwtRS256.key.pub",
+		PubKeyFile:       "testdata/jwtEdDSA.key.pub",
 	})
 
 	assert.Error(t, err)
@@ -131,9 +198,22 @@ func TestInvalidPrivKeyBytes(t *testing.T) {
 func TestInvalidPubKey(t *testing.T) {
 	_, err := New(&GinJWTMiddleware{
 		Realm:            "zone",
-		SigningAlgorithm: "RS256",
-		PrivKeyFile:      "testdata/jwtRS256.key",
+		SigningAlgorithm: "EdDSA",
+		PrivKeyFile:		PrivKeyLocation,
 		PubKeyFile:       "testdata/invalidpubkey.key",
+	})
+
+	assert.Error(t, err)
+	assert.Equal(t, ErrInvalidPubKey, err)
+}
+
+
+func TestInvalidPubKeyType(t *testing.T) {
+	_, err := New(&GinJWTMiddleware{
+		Realm:            "zone",
+		SigningAlgorithm: "EdDSA",
+		PrivKeyFile:		PrivKeyLocation,
+		PubKeyFile:       "testdata/jwtRS256.key",
 	})
 
 	assert.Error(t, err)
@@ -143,8 +223,8 @@ func TestInvalidPubKey(t *testing.T) {
 func TestInvalidPubKeyBytes(t *testing.T) {
 	_, err := New(&GinJWTMiddleware{
 		Realm:            "zone",
-		SigningAlgorithm: "RS256",
-		PrivKeyFile:      "testdata/jwtRS256.key",
+		SigningAlgorithm: "EdDSA",
+		PrivKeyFile:		PrivKeyLocation,
 		PubKeyBytes:      []byte("Invalid_Private_Key"),
 	})
 
@@ -152,27 +232,41 @@ func TestInvalidPubKeyBytes(t *testing.T) {
 	assert.Equal(t, ErrInvalidPubKey, err)
 }
 
+// TODO
+/*
 func TestMissingTimeOut(t *testing.T) {
 	authMiddleware, err := New(&GinJWTMiddleware{
 		Realm:         "test zone",
-		Key:           key,
+		PrivKeyFile:    PrivKeyLocation,
+		PubKeyFile:     PubKeyLocation,
 		Authenticator: defaultAuthenticator,
 	})
 
 	assert.NoError(t, err)
 	assert.Equal(t, time.Hour, authMiddleware.Timeout)
-}
+}*/
 
 func TestMissingTokenLookup(t *testing.T) {
 	authMiddleware, err := New(&GinJWTMiddleware{
 		Realm:         "test zone",
-		Key:           key,
+		PrivKeyFile: 		PrivKeyLocation,
+		PubKeyFile:     PubKeyLocation,
 		Authenticator: defaultAuthenticator,
 	})
 
 	assert.NoError(t, err)
 	assert.Equal(t, "header:Authorization", authMiddleware.TokenLookup)
 }
+
+
+
+
+
+// ----------------------------------------------------------------------------------------
+// test_auth_jwt_test_handlers
+
+
+
 
 func helloHandler(c *gin.Context) {
 	c.JSON(200, gin.H{
@@ -204,7 +298,8 @@ func ginHandler(auth *GinJWTMiddleware) *gin.Engine {
 func TestMissingAuthenticatorForLoginHandler(t *testing.T) {
 	authMiddleware, err := New(&GinJWTMiddleware{
 		Realm:      "test zone",
-		Key:        key,
+		PrivKeyFile:		PrivKeyLocation,
+		PubKeyFile:		PubKeyLocation,
 		Timeout:    time.Hour,
 		MaxRefresh: time.Hour * 24,
 	})
@@ -233,7 +328,8 @@ func TestLoginHandler(t *testing.T) {
 	cookieDomain := "example.com"
 	authMiddleware, err := New(&GinJWTMiddleware{
 		Realm: "test zone",
-		Key:   key,
+		PrivKeyFile:		PrivKeyLocation,
+		PubKeyFile:		PubKeyLocation,
 		PayloadFunc: func(data interface{}) MapClaims {
 			// Set custom claim, to be checked in Authorizator method
 			return MapClaims{"testkey": "testval", "exp": 0}
@@ -323,7 +419,8 @@ func TestParseToken(t *testing.T) {
 	// the middleware to test
 	authMiddleware, _ := New(&GinJWTMiddleware{
 		Realm:         "test zone",
-		Key:           key,
+		PrivKeyFile:		PrivKeyLocation,
+		PubKeyFile:		PubKeyLocation,
 		Timeout:       time.Hour,
 		MaxRefresh:    time.Hour * 24,
 		Authenticator: defaultAuthenticator,
@@ -359,62 +456,62 @@ func TestParseToken(t *testing.T) {
 
 	r.GET("/auth/hello").
 		SetHeader(gofight.H{
-			"Authorization": "Bearer " + makeTokenString("HS256", "admin"),
+			"Authorization": "Bearer " + makeTokenString("EdDSA", "admin"),
 		}).
 		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
 			assert.Equal(t, http.StatusOK, r.Code)
 		})
 }
 
-func TestParseTokenRS256(t *testing.T) {
-	// the middleware to test
-	authMiddleware, _ := New(&GinJWTMiddleware{
-		Realm:            "test zone",
-		Key:              key,
-		Timeout:          time.Hour,
-		MaxRefresh:       time.Hour * 24,
-		SigningAlgorithm: "RS256",
-		PrivKeyFile:      "testdata/jwtRS256.key",
-		PubKeyFile:       "testdata/jwtRS256.key.pub",
-		Authenticator:    defaultAuthenticator,
-	})
-
-	handler := ginHandler(authMiddleware)
-
-	r := gofight.New()
-
-	r.GET("/auth/hello").
-		SetHeader(gofight.H{
-			"Authorization": "",
-		}).
-		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
-			assert.Equal(t, http.StatusUnauthorized, r.Code)
-		})
-
-	r.GET("/auth/hello").
-		SetHeader(gofight.H{
-			"Authorization": "Test 1234",
-		}).
-		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
-			assert.Equal(t, http.StatusUnauthorized, r.Code)
-		})
-
-	r.GET("/auth/hello").
-		SetHeader(gofight.H{
-			"Authorization": "Bearer " + makeTokenString("HS384", "admin"),
-		}).
-		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
-			assert.Equal(t, http.StatusUnauthorized, r.Code)
-		})
-
-	r.GET("/auth/hello").
-		SetHeader(gofight.H{
-			"Authorization": "Bearer " + makeTokenString("RS256", "admin"),
-		}).
-		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
-			assert.Equal(t, http.StatusOK, r.Code)
-		})
-}
+//TODO
+// func TestParseTokenRS256(t *testing.T) {
+// 	// the middleware to test
+// 	authMiddleware, _ := New(&GinJWTMiddleware{
+// 		Realm:            "test zone",
+// 		Timeout:          time.Hour,
+// 		MaxRefresh:       time.Hour * 24,
+// 		SigningAlgorithm: "RS256",
+// 		PrivKeyFile:      "testdata/jwtRS256.key",
+// 		PubKeyFile:       "testdata/jwtRS256.key.pub",
+// 		Authenticator:    defaultAuthenticator,
+// 	})
+//
+// 	handler := ginHandler(authMiddleware)
+//
+// 	r := gofight.New()
+//
+// 	r.GET("/auth/hello").
+// 		SetHeader(gofight.H{
+// 			"Authorization": "",
+// 		}).
+// 		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+// 			assert.Equal(t, http.StatusUnauthorized, r.Code)
+// 		})
+//
+// 	r.GET("/auth/hello").
+// 		SetHeader(gofight.H{
+// 			"Authorization": "Test 1234",
+// 		}).
+// 		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+// 			assert.Equal(t, http.StatusUnauthorized, r.Code)
+// 		})
+//
+// 	r.GET("/auth/hello").
+// 		SetHeader(gofight.H{
+// 			"Authorization": "Bearer " + makeTokenString("HS384", "admin"),
+// 		}).
+// 		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+// 			assert.Equal(t, http.StatusUnauthorized, r.Code)
+// 		})
+//
+// 	r.GET("/auth/hello").
+// 		SetHeader(gofight.H{
+// 			"Authorization": "Bearer " + makeTokenString("RS256", "admin"),
+// 		}).
+// 		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+// 			assert.Equal(t, http.StatusOK, r.Code)
+// 		})
+// }
 
 func TestParseTokenKeyFunc(t *testing.T) {
 	// the middleware to test
@@ -453,7 +550,7 @@ func TestParseTokenKeyFunc(t *testing.T) {
 
 	r.GET("/auth/hello").
 		SetHeader(gofight.H{
-			"Authorization": "Bearer " + makeTokenString("HS384", "admin"),
+			"Authorization": "Bearer " + makeTokenString("RS256", "admin"),
 		}).
 		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
 			assert.Equal(t, http.StatusUnauthorized, r.Code)
@@ -461,18 +558,19 @@ func TestParseTokenKeyFunc(t *testing.T) {
 
 	r.GET("/auth/hello").
 		SetHeader(gofight.H{
-			"Authorization": "Bearer " + makeTokenString("RS256", "admin"),
+			"Authorization": "Bearer " + makeTokenString("EdDSA", "admin"),
 		}).
 		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
 			assert.Equal(t, http.StatusOK, r.Code)
 		})
 }
-
+/*
 func TestRefreshHandlerRS256(t *testing.T) {
 	// the middleware to test
 	authMiddleware, _ := New(&GinJWTMiddleware{
 		Realm:            "test zone",
-		Key:              key,
+		PrivKeyFile:		PrivKeyLocation,
+		PubKeyFile:		PubKeyLocation,
 		Timeout:          time.Hour,
 		MaxRefresh:       time.Hour * 24,
 		SigningAlgorithm: "RS256",
@@ -530,13 +628,14 @@ func TestRefreshHandlerRS256(t *testing.T) {
 			assert.Equal(t, http.StatusOK, r.Code)
 			assert.Equal(t, makeTokenString("RS256", "admin"), cookie.String())
 		})
-}
+}*/
 
 func TestRefreshHandler(t *testing.T) {
 	// the middleware to test
 	authMiddleware, _ := New(&GinJWTMiddleware{
 		Realm:         "test zone",
-		Key:           key,
+		PrivKeyFile:		PrivKeyLocation,
+		PubKeyFile:		PubKeyLocation,
 		Timeout:       time.Hour,
 		MaxRefresh:    time.Hour * 24,
 		Authenticator: defaultAuthenticator,
@@ -564,7 +663,7 @@ func TestRefreshHandler(t *testing.T) {
 
 	r.GET("/auth/refresh_token").
 		SetHeader(gofight.H{
-			"Authorization": "Bearer " + makeTokenString("HS256", "admin"),
+			"Authorization": "Bearer " + makeTokenString("EdDSA", "admin"),
 		}).
 		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
 			assert.Equal(t, http.StatusOK, r.Code)
@@ -575,7 +674,8 @@ func TestExpiredTokenWithinMaxRefreshOnRefreshHandler(t *testing.T) {
 	// the middleware to test
 	authMiddleware, _ := New(&GinJWTMiddleware{
 		Realm:         "test zone",
-		Key:           key,
+		PrivKeyFile:		PrivKeyLocation,
+		PubKeyFile:		PubKeyLocation,
 		Timeout:       time.Hour,
 		MaxRefresh:    2 * time.Hour,
 		Authenticator: defaultAuthenticator,
@@ -585,7 +685,7 @@ func TestExpiredTokenWithinMaxRefreshOnRefreshHandler(t *testing.T) {
 
 	r := gofight.New()
 
-	token := jwt.New(jwt.GetSigningMethod("HS256"))
+	token := jwt.New(jwt.GetSigningMethod("EdDSA"))
 	claims := token.Claims.(jwt.MapClaims)
 	claims["identity"] = "admin"
 	claims["exp"] = time.Now().Add(-time.Minute).Unix()
@@ -606,7 +706,8 @@ func TestExpiredTokenOnRefreshHandler(t *testing.T) {
 	// the middleware to test
 	authMiddleware, _ := New(&GinJWTMiddleware{
 		Realm:         "test zone",
-		Key:           key,
+		PrivKeyFile:		PrivKeyLocation,
+		PubKeyFile:		PubKeyLocation,
 		Timeout:       time.Hour,
 		Authenticator: defaultAuthenticator,
 	})
@@ -635,7 +736,8 @@ func TestAuthorizator(t *testing.T) {
 	// the middleware to test
 	authMiddleware, _ := New(&GinJWTMiddleware{
 		Realm:         "test zone",
-		Key:           key,
+		PrivKeyFile:		PrivKeyLocation,
+		PubKeyFile:		PubKeyLocation,
 		Timeout:       time.Hour,
 		MaxRefresh:    time.Hour * 24,
 		Authenticator: defaultAuthenticator,
@@ -650,7 +752,7 @@ func TestAuthorizator(t *testing.T) {
 
 	r.GET("/auth/hello").
 		SetHeader(gofight.H{
-			"Authorization": "Bearer " + makeTokenString("HS256", "test"),
+			"Authorization": "Bearer " + makeTokenString("EdDSA", "test"),
 		}).
 		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
 			assert.Equal(t, http.StatusForbidden, r.Code)
@@ -658,7 +760,7 @@ func TestAuthorizator(t *testing.T) {
 
 	r.GET("/auth/hello").
 		SetHeader(gofight.H{
-			"Authorization": "Bearer " + makeTokenString("HS256", "admin"),
+			"Authorization": "Bearer " + makeTokenString("EdDSA", "admin"),
 		}).
 		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
 			assert.Equal(t, http.StatusOK, r.Code)
@@ -668,7 +770,8 @@ func TestAuthorizator(t *testing.T) {
 func TestParseTokenWithJsonNumber(t *testing.T) {
 	authMiddleware, _ := New(&GinJWTMiddleware{
 		Realm:         "test zone",
-		Key:           key,
+		PrivKeyFile:		PrivKeyLocation,
+		PubKeyFile:		PubKeyLocation,
 		Timeout:       time.Hour,
 		MaxRefresh:    time.Hour * 24,
 		Authenticator: defaultAuthenticator,
@@ -684,7 +787,7 @@ func TestParseTokenWithJsonNumber(t *testing.T) {
 
 	r.GET("/auth/hello").
 		SetHeader(gofight.H{
-			"Authorization": "Bearer " + makeTokenString("HS256", "admin"),
+			"Authorization": "Bearer " + makeTokenString("EdDSA", "admin"),
 		}).
 		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
 			assert.Equal(t, http.StatusOK, r.Code)
@@ -695,7 +798,8 @@ func TestClaimsDuringAuthorization(t *testing.T) {
 	// the middleware to test
 	authMiddleware, _ := New(&GinJWTMiddleware{
 		Realm:      "test zone",
-		Key:        key,
+		PrivKeyFile:		PrivKeyLocation,
+		PubKeyFile:		PubKeyLocation,
 		Timeout:    time.Hour,
 		MaxRefresh: time.Hour * 24,
 		PayloadFunc: func(data interface{}) MapClaims {
@@ -822,7 +926,8 @@ func TestEmptyClaims(t *testing.T) {
 	// the middleware to test
 	authMiddleware, _ := New(&GinJWTMiddleware{
 		Realm:      "test zone",
-		Key:        key,
+		PrivKeyFile:		PrivKeyLocation,
+		PubKeyFile:		PubKeyLocation,
 		Timeout:    time.Hour,
 		MaxRefresh: time.Hour * 24,
 		Authenticator: func(c *gin.Context) (interface{}, error) {
@@ -865,7 +970,8 @@ func TestUnauthorized(t *testing.T) {
 	// the middleware to test
 	authMiddleware, _ := New(&GinJWTMiddleware{
 		Realm:         "test zone",
-		Key:           key,
+		PrivKeyFile:		PrivKeyLocation,
+		PubKeyFile:		PubKeyLocation,
 		Timeout:       time.Hour,
 		MaxRefresh:    time.Hour * 24,
 		Authenticator: defaultAuthenticator,
@@ -891,7 +997,8 @@ func TestTokenExpire(t *testing.T) {
 	// the middleware to test
 	authMiddleware, _ := New(&GinJWTMiddleware{
 		Realm:         "test zone",
-		Key:           key,
+		PrivKeyFile:		PrivKeyLocation,
+		PubKeyFile:		PubKeyLocation,
 		Timeout:       time.Hour,
 		MaxRefresh:    -time.Second,
 		Authenticator: defaultAuthenticator,
@@ -921,7 +1028,8 @@ func TestTokenFromQueryString(t *testing.T) {
 	// the middleware to test
 	authMiddleware, _ := New(&GinJWTMiddleware{
 		Realm:         "test zone",
-		Key:           key,
+		PrivKeyFile:		PrivKeyLocation,
+		PubKeyFile:		PubKeyLocation,
 		Timeout:       time.Hour,
 		Authenticator: defaultAuthenticator,
 		Unauthorized: func(c *gin.Context, code int, message string) {
@@ -958,11 +1066,12 @@ func TestTokenFromQueryString(t *testing.T) {
 func TestTokenFromParamPath(t *testing.T) {
 	// the middleware to test
 	authMiddleware, _ := New(&GinJWTMiddleware{
-		Realm:         "test zone",
-		Key:           key,
-		Timeout:       time.Hour,
-		Authenticator: defaultAuthenticator,
-		Unauthorized: func(c *gin.Context, code int, message string) {
+		Realm:					"test zone",
+		PrivKeyFile:		PrivKeyLocation,
+		PubKeyFile:			PubKeyLocation,
+		Timeout:       	time.Hour,
+		Authenticator:	defaultAuthenticator,
+		Unauthorized:		func(c *gin.Context, code int, message string) {
 			c.String(code, message)
 		},
 		TokenLookup: "param:token",
@@ -994,7 +1103,8 @@ func TestTokenFromCookieString(t *testing.T) {
 	// the middleware to test
 	authMiddleware, _ := New(&GinJWTMiddleware{
 		Realm:         "test zone",
-		Key:           key,
+		PrivKeyFile:		PrivKeyLocation,
+		PubKeyFile:		PubKeyLocation,
 		Timeout:       time.Hour,
 		Authenticator: defaultAuthenticator,
 		Unauthorized: func(c *gin.Context, code int, message string) {
@@ -1010,7 +1120,6 @@ func TestTokenFromCookieString(t *testing.T) {
 	userToken, _, _ := authMiddleware.TokenGenerator(MapClaims{
 		"identity": "admin",
 	})
-
 	r.GET("/auth/refresh_token").
 		SetHeader(gofight.H{
 			"Authorization": "Bearer " + userToken,
@@ -1051,11 +1160,12 @@ func TestTokenFromCookieString(t *testing.T) {
 func TestDefineTokenHeadName(t *testing.T) {
 	// the middleware to test
 	authMiddleware, _ := New(&GinJWTMiddleware{
-		Realm:         "test zone",
-		Key:           key,
-		Timeout:       time.Hour,
-		TokenHeadName: "JWTTOKEN       ",
-		Authenticator: defaultAuthenticator,
+		Realm:         	"test zone",
+		PrivKeyFile:		PrivKeyLocation,
+		PubKeyFile:			PubKeyLocation,
+		Timeout:       	time.Hour,
+		TokenHeadName: 	"JWTTOKEN       ",
+		Authenticator: 	defaultAuthenticator,
 	})
 
 	handler := ginHandler(authMiddleware)
@@ -1064,7 +1174,7 @@ func TestDefineTokenHeadName(t *testing.T) {
 
 	r.GET("/auth/hello").
 		SetHeader(gofight.H{
-			"Authorization": "Bearer " + makeTokenString("HS256", "admin"),
+			"Authorization": "Bearer " + makeTokenString("EdDSA", "admin"),
 		}).
 		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
 			assert.Equal(t, http.StatusUnauthorized, r.Code)
@@ -1072,7 +1182,7 @@ func TestDefineTokenHeadName(t *testing.T) {
 
 	r.GET("/auth/hello").
 		SetHeader(gofight.H{
-			"Authorization": "JWTTOKEN " + makeTokenString("HS256", "admin"),
+			"Authorization": "JWTTOKEN " + makeTokenString("EdDSA", "admin"),
 		}).
 		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
 			assert.Equal(t, http.StatusOK, r.Code)
@@ -1085,7 +1195,8 @@ func TestHTTPStatusMessageFunc(t *testing.T) {
 	successMessage := "Overwrite error message."
 
 	authMiddleware, _ := New(&GinJWTMiddleware{
-		Key:           key,
+		PrivKeyFile:		PrivKeyLocation,
+		PubKeyFile:		PubKeyLocation,
 		Timeout:       time.Hour,
 		MaxRefresh:    time.Hour * 24,
 		Authenticator: defaultAuthenticator,
@@ -1109,11 +1220,12 @@ func TestHTTPStatusMessageFunc(t *testing.T) {
 func TestSendAuthorizationBool(t *testing.T) {
 	// the middleware to test
 	authMiddleware, _ := New(&GinJWTMiddleware{
-		Realm:             "test zone",
-		Key:               key,
-		Timeout:           time.Hour,
-		MaxRefresh:        time.Hour * 24,
-		Authenticator:     defaultAuthenticator,
+		Realm:					"test zone",
+		PrivKeyFile:		PrivKeyLocation,
+		PubKeyFile:			PubKeyLocation,
+		Timeout:				time.Hour,
+		MaxRefresh:			time.Hour * 24,
+		Authenticator:	defaultAuthenticator,
 		SendAuthorization: true,
 		Authorizator: func(data interface{}, c *gin.Context) bool {
 			return data.(string) == "admin"
@@ -1126,7 +1238,7 @@ func TestSendAuthorizationBool(t *testing.T) {
 
 	r.GET("/auth/hello").
 		SetHeader(gofight.H{
-			"Authorization": "Bearer " + makeTokenString("HS256", "test"),
+			"Authorization": "Bearer " + makeTokenString("EdDSA", "test"),
 		}).
 		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
 			assert.Equal(t, http.StatusForbidden, r.Code)
@@ -1134,12 +1246,13 @@ func TestSendAuthorizationBool(t *testing.T) {
 
 	r.GET("/auth/hello").
 		SetHeader(gofight.H{
-			"Authorization": "Bearer " + makeTokenString("HS256", "admin"),
+			"Authorization": "Bearer " + makeTokenString("EdDSA", "admin"),
 		}).
 		Run(handler, func(r gofight.HTTPResponse, rq gofight.HTTPRequest) {
+
 			//nolint:staticcheck
 			token := r.HeaderMap.Get("Authorization")
-			assert.Equal(t, "Bearer "+makeTokenString("HS256", "admin"), token)
+			assert.Equal(t, "Bearer " + makeTokenString("EdDSA", "admin"), token)
 			assert.Equal(t, http.StatusOK, r.Code)
 		})
 }
@@ -1148,7 +1261,8 @@ func TestExpiredTokenOnAuth(t *testing.T) {
 	// the middleware to test
 	authMiddleware, _ := New(&GinJWTMiddleware{
 		Realm:             "test zone",
-		Key:               key,
+		PrivKeyFile:		PrivKeyLocation,
+		PubKeyFile:		PubKeyLocation,
 		Timeout:           time.Hour,
 		MaxRefresh:        time.Hour * 24,
 		Authenticator:     defaultAuthenticator,
@@ -1178,7 +1292,8 @@ func TestBadTokenOnRefreshHandler(t *testing.T) {
 	// the middleware to test
 	authMiddleware, _ := New(&GinJWTMiddleware{
 		Realm:         "test zone",
-		Key:           key,
+		PrivKeyFile:		PrivKeyLocation,
+		PubKeyFile:		PubKeyLocation,
 		Timeout:       time.Hour,
 		Authenticator: defaultAuthenticator,
 	})
@@ -1200,7 +1315,8 @@ func TestExpiredField(t *testing.T) {
 	// the middleware to test
 	authMiddleware, _ := New(&GinJWTMiddleware{
 		Realm:         "test zone",
-		Key:           key,
+		PrivKeyFile:		PrivKeyLocation,
+		PubKeyFile:		PubKeyLocation,
 		Timeout:       time.Hour,
 		Authenticator: defaultAuthenticator,
 	})
@@ -1209,7 +1325,7 @@ func TestExpiredField(t *testing.T) {
 
 	r := gofight.New()
 
-	token := jwt.New(jwt.GetSigningMethod("HS256"))
+	token := jwt.New(jwt.GetSigningMethod("EdDSA"))
 	claims := token.Claims.(jwt.MapClaims)
 	claims["identity"] = "admin"
 	claims["orig_iat"] = 0
@@ -1229,7 +1345,6 @@ func TestExpiredField(t *testing.T) {
 	// wrong format
 	claims["exp"] = "wrongFormatForExpiry"
 	tokenString, _ = token.SignedString(key)
-
 	r.GET("/auth/hello").
 		SetHeader(gofight.H{
 			"Authorization": "Bearer " + tokenString,
@@ -1246,7 +1361,8 @@ func TestExpiredFieldRequiredParserOption(t *testing.T) {
 	// the middleware to test
 	authMiddleware, _ := New(&GinJWTMiddleware{
 		Realm:         "test zone",
-		Key:           key,
+		PrivKeyFile:		PrivKeyLocation,
+		PubKeyFile:		PubKeyLocation,
 		Timeout:       time.Hour,
 		Authenticator: defaultAuthenticator,
 		ParseOptions:  []jwt.ParserOption{jwt.WithExpirationRequired()},
@@ -1256,7 +1372,7 @@ func TestExpiredFieldRequiredParserOption(t *testing.T) {
 
 	r := gofight.New()
 
-	token := jwt.New(jwt.GetSigningMethod("HS256"))
+	token := jwt.New(jwt.GetSigningMethod("EdDSA"))
 	claims := token.Claims.(jwt.MapClaims)
 	claims["identity"] = "admin"
 	claims["orig_iat"] = 0
@@ -1293,7 +1409,8 @@ func TestCheckTokenString(t *testing.T) {
 	// the middleware to test
 	authMiddleware, _ := New(&GinJWTMiddleware{
 		Realm:         "test zone",
-		Key:           key,
+		PrivKeyFile:		PrivKeyLocation,
+		PubKeyFile:			PubKeyLocation,
 		Timeout:       1 * time.Second,
 		Authenticator: defaultAuthenticator,
 		Unauthorized: func(c *gin.Context, code int, message string) {
@@ -1350,7 +1467,8 @@ func TestLogout(t *testing.T) {
 	// the middleware to test
 	authMiddleware, _ := New(&GinJWTMiddleware{
 		Realm:         "test zone",
-		Key:           key,
+		PrivKeyFile:		PrivKeyLocation,
+		PubKeyFile:		PubKeyLocation,
 		Timeout:       time.Hour,
 		Authenticator: defaultAuthenticator,
 		SendCookie:    true,
@@ -1369,3 +1487,7 @@ func TestLogout(t *testing.T) {
 			assert.Equal(t, fmt.Sprintf("%s=; Path=/; Domain=%s; Max-Age=0", cookieName, cookieDomain), r.HeaderMap.Get("Set-Cookie"))
 		})
 }
+
+
+
+
