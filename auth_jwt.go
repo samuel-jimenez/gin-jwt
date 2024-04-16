@@ -25,8 +25,8 @@ type GinJWTMiddleware struct {
 	// Realm name to display to the user. Required.
 	Realm string
 
-	// signing algorithm - possible values are HS256, HS384, HS512, RS256, RS384 or RS512
-	// Optional, default is RS256.
+	// signing algorithm - possible values are RS256, RS384, RS512, or EdDSA
+	// Optional, default is EdDSA.
 	SigningAlgorithm string
 
 	// Secret key used for signing. Required.
@@ -292,11 +292,7 @@ func (mw *GinJWTMiddleware) publicKey() error {
 }
 
 func (mw *GinJWTMiddleware) usingPublicKeyAlgo() bool {
-	switch mw.SigningAlgorithm {
-	case "RS256", "RS512", "RS384":
-		return true
-	}
-	return false
+	return true
 }
 
 // MiddlewareInit initialize jwt configs.
@@ -306,7 +302,7 @@ func (mw *GinJWTMiddleware) MiddlewareInit() error {
 	}
 
 	if mw.SigningAlgorithm == "" {
-		mw.SigningAlgorithm = "RS256"
+		mw.SigningAlgorithm = "EdDSA"
 	}
 
 	if mw.Timeout == 0 {

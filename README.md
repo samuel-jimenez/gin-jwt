@@ -45,6 +45,12 @@ import "github.com/appleboy/gin-jwt"
 
 ## Example
 
+Generate keys:
+```
+ssh-keygen -t ed25519 -a 100 -f /path/to/ed25519
+ssh-keygen -t rsa -b 4096 -a 100 -f /path/to/rsa
+```
+
 Please see [the example file](_example/basic/server.go) and you can use `ExtractClaims` to fetch user data.
 
 ```go
